@@ -91,40 +91,40 @@ getSetBits :: Word8 -> Word8 -> Word8
 getSetBits inputBits desiredBits = (.&.) inputBits desiredBits
 
 goThroughList :: [Int] -> Word8 -> Int
-goThroughList [] y = 0
-goThroughList (x:xs) zero = x
-goThroughList (x:xs) y = goThroughList xs (y-1)
+goThroughList [] _ = 0
+goThroughList (x:xs) y
+  | y == zero = x
+  | otherwise = goThroughList xs (y-1)
 
 getFrameSize :: Word8 -> Word8 -> Int
-getFrameSize layer freq = (144 * (bitRate layer freq) `div` (sampleRate layer freq)) + (padding freq)
+getFrameSize layer freq = ((144 * (bitRate layer freq) `div` (sampleRate layer freq)) + (padding freq)) - 4
 
 bitRate :: Word8 -> Word8 -> Int
-bitRate layer freq = getBitRate (shiftL freq 4) (getSetBits layer seven) (getSetBits layer six)
+bitRate layer freq = getBitRate (shiftR freq 4) (getSetBits layer seven) (getSetBits layer six)
 
 sampleRate :: Word8 -> Word8 -> Int
-sampleRate layer freq = getSampleRate (shiftL (getSetBits freq hexB) 3) (getSetBits layer seven)
+sampleRate layer freq = getSampleRate (shiftR (getSetBits freq hexB) 3) (getSetBits layer seven)
 
 padding :: Word8 -> Int
 padding freq = getPadding (getSetBits freq two)
 
 
 getBitRate :: Word8 -> Word8 -> Word8 -> Int
---getBitRate bitr _ six = goThroughList mpeg1_2_L1 (bitr - 1)-- grab bitrate from bitr position in mpeg1_2_L1 - 1
---getBitRate bitr _ four = goThroughList mpeg1_2_L2 (bitr - 1)-- grab bitrate from bitr position in mpeg1_2_L2 - 1
-getBitRate bitr seven two = goThroughList mpeg1_L3 (bitr - 1)-- grab bitrate from bitr position in mpeg1_L3 - 1
-getBitRate bitr _ x
+getBitRate bitr y x
+  | y == seven && x == two = goThroughList mpeg1_L3 (bitr - 1)
   | x == six = goThroughList mpeg1_2_L1 (bitr - 1)
   | x == four = goThroughList mpeg1_2_L2 (bitr - 1)
   | x == two = goThroughList mpeg2_L3 (bitr - 1)
---getBitRate bitr _ _ = goThroughList mpeg2_L3 (bitr - 1)-- grab bitrate from bitr position in mpeg2_L3 - 1
 
 getSampleRate :: Word8 -> Word8 -> Int
-getSampleRate freq seven = goThroughList mpeg1_freq freq -- get freq location in mpeg1_freq Array
-getSampleRate freq x = goThroughList mpeg2_freq freq -- get freq location in mpeg2_freq Array
+getSampleRate freq x
+  | x == seven = goThroughList mpeg1_freq freq -- get freq location in mpeg1_freq Array
+  | otherwise = goThroughList mpeg2_freq freq -- get freq location in mpeg2_freq Array
 
 getPadding :: Word8 -> Int
-getPadding two = 1
-getPadding x = 0
+getPadding x
+  | x == two = 1
+  | otherwise = 0
 
 -- Reference = http://id3.org/mp3Frame
 
@@ -142,14 +142,22 @@ processMp3 file = BS.pack $ processFrame $ BS.unpack file
 -- Start processing the Frame, breaking into header/CRC/Side information, and Data
 processFrame :: [Word8] -> [Word8]
 processFrame [] = []
-processFrame (h1:h2:h3:h4:f) = h1 : h2 : h3 : h4 : (processCRC (getSetBits h2 one) (getFrameSize h2 h3) f)
+processFrame (h1:h2:h3:h4:f) = h1 : h2 : h3 : h4 : (processSideInformation (getSetBits h2 one) (shiftR h4 6) (getFrameSize h2 h3) f)
 
---processCRC
-processCRC :: Word8 -> Int -> [Word8] -> [Word8]
-processCRC one frms (p1: p2: f) = p1 : p2 : processSideInformation frms f
-processCRC zero frms f = processSideInformation frms f
+processSideInformation :: Word8 -> Word8 -> Int -> [Word8] -> [Word8]
+processSideInformation x y frms f
+  | x == one && y == three = takeOutSI (16+17) frms f
+  | x == one = takeOutSI (16+32) frms f
+  | y == three = takeOutSI 17 frms f
+  | otherwise = takeOutSI 32 frms f
 
---processSideInformation
-processSideInformation frms file = file
+takeOutSI :: Int -> Int -> [Word8] -> [Word8]
+takeOutSI 0 frms f = processMain frms f
+takeOutSI bytes frms (f:fs) = f : takeOutSI (bytes - 1) (frms - 1) fs
 
---flipData
+processMain :: Int -> [Word8] -> [Word8]
+processMain 0 f = processFrame f
+processMain frms (f:fs) = flipData f : processMain (frms - 1) fs
+
+flipData :: Word8 -> Word8
+flipData bits = complement bits
