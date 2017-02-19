@@ -142,7 +142,7 @@ processMp3 file = BS.pack $ processFrame $ BS.unpack file
 -- Start processing the Frame, breaking into header/CRC/Side information, and Data
 processFrame :: [Word8] -> [Word8]
 processFrame [] = []
-processFrame (h1:h2:h3:h4:f) = h1 : h2 : h3 : h4 : (processSideInformation (getSetBits h2 one) (shiftR h4 6) (getFrameSize h2 h3) f)
+processFrame (h1:h2:h3:h4:f) = h1 : h2 : h3 : h4 : (processSideInformation (getSetBits h2 one) (shiftR h4 6) ((getFrameSize h2 h3) - 4) f)
 
 processSideInformation :: Word8 -> Word8 -> Int -> [Word8] -> [Word8]
 processSideInformation x y frms f
@@ -156,8 +156,7 @@ takeOutSI 0 frms f = processMain frms f
 takeOutSI bytes frms (f:fs) = f : takeOutSI (bytes - 1) (frms - 1) fs
 
 processMain :: Int -> [Word8] -> [Word8]
+processMain _ [] = []
 processMain 0 f = processFrame f
-processMain frms (f:fs) = flipData f : processMain (frms - 1) fs
-
-flipData :: Word8 -> Word8
-flipData bits = complement bits
+processMain frms (f:fs) = complement f : processMain (frms - 1) fs
+-- cleared out flip (162-164)
