@@ -7,7 +7,7 @@ import Data.Word
 import Data.Bits
 import Data.Array
 
--- Copyright (c) 2016 Jedidiah River Clemons-Johnson @ www.jedidiahriver.com
+-- Copyright (c) 2016-2020 Jedidiah River Clemons-Johnson @ jriver.xyz
 -- MIT License @ opensource.org/licenses/MIT
 
 -- Constants
@@ -136,6 +136,9 @@ main = do
   print "complete" -- Lets you know the program is complete
 
 -- Start processing the file
+-- Break the file apart
+-- process the file
+-- reassemble the file
 processMp3 :: BS.ByteString -> BS.ByteString
 processMp3 file = BS.pack $ processFrame $ BS.unpack file
 
@@ -155,8 +158,11 @@ takeOutSI :: Int -> Int -> [Word8] -> [Word8]
 takeOutSI 0 frms f = processMain frms f
 takeOutSI bytes frms (f:fs) = f : takeOutSI (bytes - 1) (frms - 1) fs
 
+-- processMain :: Int -> [Word8] -> [Word8]
+-- processMain _ [] = []
+-- processMain frms (f:fs) = [complement f] ++ fs
+
 processMain :: Int -> [Word8] -> [Word8]
 processMain _ [] = []
 processMain 0 f = processFrame f
-processMain frms (f:fs) = complement f : processMain (frms - 1) fs
--- cleared out flip (162-164)
+processMain frms (f:fs) = [complement f] ++ processMain (frms - 1) fs
